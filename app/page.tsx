@@ -127,6 +127,7 @@ export default function Home() {
   const autoDetectedRef = useRef(false);
 
   // Orders states
+  const [orderPlatform, setOrderPlatform] = useState<"jd" | "taobao" | "pdd">("jd");
   const [orderIds, setOrderIds] = useState("");
   const [querying, setQuerying] = useState(false);
   const [ordersResult, setOrdersResult] = useState<OrdersResult | null>(null);
@@ -298,7 +299,12 @@ export default function Home() {
     setOrdersResult(null);
 
     try {
-      const res = await fetch("/api/jd/orders", {
+      const apiMap: Record<string, string> = {
+        jd: "/api/jd/orders",
+        taobao: "/api/taobao/orders",
+        pdd: "/api/pdd/orders",
+      };
+      const res = await fetch(apiMap[orderPlatform], {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderIds: ids }),
@@ -314,7 +320,7 @@ export default function Home() {
     } finally {
       setQuerying(false);
     }
-  }, [orderIds]);
+  }, [orderIds, orderPlatform]);
 
   // ---- Render ----
 
@@ -583,9 +589,33 @@ export default function Home() {
     }
   };
 
+  const orderPlatformOptions = [
+    { key: "jd" as const, label: "京东", color: "red" },
+    { key: "taobao" as const, label: "淘宝", color: "orange" },
+    { key: "pdd" as const, label: "拼多多", color: "red" },
+  ];
+
   const renderOrdersTab = () => (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl shadow-sm p-4">
+        {/* Platform Selector */}
+        <label className="block text-sm font-medium text-gray-700 mb-2">选择平台</label>
+        <div className="flex gap-2 mb-4">
+          {orderPlatformOptions.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => { setOrderPlatform(opt.key); setOrdersResult(null); setOrdersError(""); }}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                orderPlatform === opt.key
+                  ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-sm"
+                  : "bg-gray-100 text-gray-500 active:bg-gray-200"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         <label className="block text-sm font-medium text-gray-700 mb-2">订单号</label>
         <textarea
           value={orderIds}
@@ -649,11 +679,11 @@ export default function Home() {
                     <span className="text-xs text-gray-400">订单号: {order.orderId}</span>
                     <span
                       className={`text-xs px-2 py-0.5 rounded-md font-medium ${
-                        order.validCode === 17
+                        /已完成|已结算|审核成功/.test(order.statusText || "")
                           ? "bg-green-50 text-green-600"
-                          : order.validCode === 16
+                          : /已付款|已成团|确认收货/.test(order.statusText || "")
                           ? "bg-blue-50 text-blue-600"
-                          : order.validCode === 15
+                          : /待付款/.test(order.statusText || "")
                           ? "bg-yellow-50 text-yellow-600"
                           : "bg-gray-100 text-gray-500"
                       }`}
@@ -677,10 +707,8 @@ export default function Home() {
                     <span className="text-xs text-gray-400">{order.orderTime}</span>
                     {order.withdrawable ? (
                       <span className="text-xs text-green-600 font-medium">可提现</span>
-                    ) : order.validCode === 17 && order.withdrawableTime ? (
+                    ) : order.withdrawableTime ? (
                       <span className="text-xs text-gray-400">{order.withdrawableTime} 后可提现</span>
-                    ) : order.validCode === 16 ? (
-                      <span className="text-xs text-blue-500">等待确认收货</span>
                     ) : null}
                   </div>
                 </div>
@@ -695,19 +723,19 @@ export default function Home() {
         <ul className="space-y-1.5 text-xs text-blue-700 leading-relaxed">
           <li className="flex gap-2">
             <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
+            <span>请先选择对应平台，再输入该平台的订单号</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
             <span>仅可查询通过推广链接下单的订单</span>
           </li>
           <li className="flex gap-2">
             <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
-            <span>订单号可在京东APP「我的订单」中查看</span>
+            <span>订单号可在{platformAppName[orderPlatform]}APP「我的订单」中查看</span>
           </li>
           <li className="flex gap-2">
             <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
-            <span>返利金额为平台佣金的50%</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
-            <span>确认收货7天后可提现，最终以实际结算为准</span>
+            <span>确认收货后结算可提现，最终以实际结算为准</span>
           </li>
         </ul>
       </div>
