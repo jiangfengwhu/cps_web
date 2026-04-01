@@ -7,16 +7,13 @@ type ConvertPhase = "input" | "converting" | "success";
 type Platform = "jd" | "taobao" | "pdd" | null;
 
 interface Product {
-  skuId?: number;
   name: string;
   price?: number | string;
   imgUrl: string;
   commissionRate?: number;
-  isJdSale?: boolean;
-  isFreeShipping?: boolean;
-  category?: string;
   shopName?: string;
   shopType?: string;
+  coupon?: string;
 }
 
 interface ConvertResult {
@@ -127,7 +124,7 @@ export default function Home() {
   const autoDetectedRef = useRef(false);
 
   // Orders states
-  const [orderPlatform, setOrderPlatform] = useState<"jd" | "taobao" | "pdd">("jd");
+  const [orderPlatform, setOrderPlatform] = useState<"jd" | "taobao" | "pdd">("pdd");
   const [orderIds, setOrderIds] = useState("");
   const [querying, setQuerying] = useState(false);
   const [ordersResult, setOrdersResult] = useState<OrdersResult | null>(null);
@@ -140,7 +137,11 @@ export default function Home() {
 
     const p = detectedPlatform || detectPlatform(targetUrl);
     if (!p) {
-      setConvertError("无法识别平台，请粘贴京东或淘宝的商品链接");
+      setConvertError("无法识别商品链接，请粘贴拼多多商品链接");
+      return null;
+    }
+    if (p === "jd" || p === "taobao") {
+      setConvertError(`${platformName[p]}暂未开通，敬请期待。目前仅支持拼多多`);
       return null;
     }
     setPlatform(p);
@@ -165,9 +166,10 @@ export default function Home() {
       }
       setConvertResult(data);
 
-      const copyContent = p === "taobao"
+      const plat = p as Platform;
+      const copyContent = plat === "taobao"
         ? (data.tpwd || data.shortUrl || data.clickUrl)
-        : p === "jd"
+        : plat === "jd"
         ? (data.jCommand || data.shortUrl || data.clickUrl)
         : (data.shortUrl || data.clickUrl);
       if (copyContent) {
@@ -352,49 +354,57 @@ export default function Home() {
       </div>
 
       {/* Product Card */}
-      {convertResult?.product && (
-        <div className="bg-white rounded-2xl shadow-sm p-4">
-          <div className="flex gap-3">
-            <img
-              src={convertResult.product.imgUrl}
-              alt={convertResult.product.name}
-              className="w-24 h-24 object-cover rounded-xl flex-shrink-0 bg-gray-100"
-            />
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">
-                {convertResult.product.name}
-              </h3>
-              <div className="mt-2 flex items-baseline gap-2 flex-wrap">
-                {convertResult.product.price != null && (
-                  <span className="text-xl font-bold text-red-500">
-                    ¥{convertResult.product.price}
-                  </span>
-                )}
-                {convertResult.product.isJdSale && (
-                  <span className="text-xs bg-red-50 text-red-600 px-1.5 py-0.5 rounded-md font-medium">自营</span>
-                )}
-                {convertResult.product.isFreeShipping && (
-                  <span className="text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded-md font-medium">包邮</span>
-                )}
-                {convertResult.product.category && (
-                  <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md font-medium">{convertResult.product.category}</span>
-                )}
-                {convertResult.product.shopType && (
-                  <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-md font-medium">{convertResult.product.shopType}</span>
+      {convertResult?.product && (() => {
+        const p = convertResult.product;
+        const price = p.price != null ? Number(p.price) : 0;
+        const rate = p.commissionRate ?? 0;
+        const coupon = p.coupon ? Number(p.coupon) : 0;
+        const finalPrice = coupon > 0 ? Math.max(price - coupon, 0) : price;
+        const estimateCommission = rate > 0 && price > 0 ? (finalPrice * rate / 100 * 0.5) : 0;
+
+        return (
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <div className="flex gap-3">
+              {p.imgUrl && (
+                <img
+                  src={p.imgUrl}
+                  alt={p.name}
+                  className="w-24 h-24 object-cover rounded-xl flex-shrink-0 bg-gray-100"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">
+                  {p.name}
+                </h3>
+                <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+                  {price > 0 && (
+                    <span className="text-xl font-bold text-red-500">
+                      ¥{coupon > 0 ? finalPrice.toFixed(2) : p.price}
+                    </span>
+                  )}
+                  {coupon > 0 && price > 0 && (
+                    <span className="text-xs text-gray-400 line-through">¥{p.price}</span>
+                  )}
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                  {coupon > 0 && (
+                    <span className="text-xs bg-red-50 text-red-500 px-1.5 py-0.5 rounded-md font-medium">券¥{p.coupon}</span>
+                  )}
+                  {p.shopName && (
+                    <span className="text-xs text-gray-400">{p.shopName}</span>
+                  )}
+                </div>
+                {estimateCommission > 0 && (
+                  <div className="mt-2 inline-flex items-center gap-1 bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded-md font-medium">
+                    <span>预估返利</span>
+                    <span className="text-sm font-bold">¥{estimateCommission.toFixed(2)}</span>
+                  </div>
                 )}
               </div>
-              {(convertResult.product.commissionRate ?? 0) > 0 && convertResult.product.price != null && (
-                <div className="mt-1.5 inline-flex items-center gap-1 bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded-md font-medium">
-                  <span>预估返利</span>
-                  <span className="text-sm font-bold">
-                    ¥{((Number(convertResult.product.price) * (convertResult.product.commissionRate ?? 0)) / 100 * 0.5).toFixed(2)}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Action Buttons */}
       <div className="space-y-3">
@@ -478,11 +488,7 @@ export default function Home() {
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>下单 <strong>7天后</strong> 可提现（防止退款导致佣金失效）</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>退款后返利将被取消</span>
+            <span>下单 <strong>7天后</strong> 可提现（退款后没有返利）</span>
           </li>
         </ul>
       </div>
@@ -497,7 +503,7 @@ export default function Home() {
         <textarea
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="请粘贴京东/淘宝/拼多多商品链接..."
+          placeholder="请粘贴拼多多商品链接..."
           className="w-full h-20 px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-400 resize-none text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -530,25 +536,35 @@ export default function Home() {
         </div>
       )}
 
+      {/* Platform Notice */}
+      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-400 flex-shrink-0 mt-0.5 text-sm">ℹ</span>
+          <span className="text-xs text-blue-700 leading-relaxed">
+            目前仅支持<strong>拼多多</strong>，京东、淘宝即将上线
+          </span>
+        </div>
+      </div>
+
       {/* Tips */}
       <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
         <h4 className="text-sm font-semibold text-amber-800 mb-2.5">使用说明</h4>
         <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❶</span>
-            <span>在京东/淘宝/拼多多APP中找到想买的商品，复制链接</span>
+            <span>在拼多多APP中找到想买的商品，点击分享复制链接</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❷</span>
-            <span>回到本页面，自动识别平台并生成推广链接</span>
+            <span>回到本页面，自动识别并生成推广链接</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❸</span>
-            <span>推广链接自动复制后，打开对应APP下单即可</span>
+            <span>自动跳转拼多多APP下单，享受返利优惠</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❹</span>
-            <span>下单 <strong>7天后</strong> 可查询返利并提现</span>
+            <span>确认收货后可查询返利</span>
           </li>
         </ul>
       </div>
@@ -556,10 +572,6 @@ export default function Home() {
       <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
         <h4 className="text-sm font-semibold text-amber-800 mb-2.5">注意事项</h4>
         <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
-          <li className="flex gap-2">
-            <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>支持<strong>京东、淘宝、天猫、拼多多</strong>，自动识别平台</span>
-          </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
             <span>打开APP后<strong>不要更改商品规格</strong>，否则需重新生成</span>
@@ -590,9 +602,9 @@ export default function Home() {
   };
 
   const orderPlatformOptions = [
-    { key: "jd" as const, label: "京东", color: "red" },
-    { key: "taobao" as const, label: "淘宝", color: "orange" },
-    { key: "pdd" as const, label: "拼多多", color: "red" },
+    { key: "pdd" as const, label: "拼多多", disabled: false },
+    { key: "jd" as const, label: "京东(即将上线)", disabled: true },
+    { key: "taobao" as const, label: "淘宝(即将上线)", disabled: true },
   ];
 
   const renderOrdersTab = () => (
@@ -604,9 +616,12 @@ export default function Home() {
           {orderPlatformOptions.map((opt) => (
             <button
               key={opt.key}
-              onClick={() => { setOrderPlatform(opt.key); setOrdersResult(null); setOrdersError(""); }}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                orderPlatform === opt.key
+              onClick={() => { if (!opt.disabled) { setOrderPlatform(opt.key); setOrdersResult(null); setOrdersError(""); } }}
+              disabled={opt.disabled}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                opt.disabled
+                  ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+                  : orderPlatform === opt.key
                   ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-sm"
                   : "bg-gray-100 text-gray-500 active:bg-gray-200"
               }`}
@@ -634,7 +649,7 @@ export default function Home() {
               查询中...
             </span>
           ) : (
-            "查询佣金"
+            "查询提现"
           )}
         </button>
       </div>
@@ -648,7 +663,7 @@ export default function Home() {
       {ordersResult && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl shadow-sm p-5">
-            <h3 className="text-sm font-medium text-gray-500 mb-3 text-center">佣金汇总</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-3 text-center">返利汇总</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
                 <p className="text-xs text-gray-400 mb-1">预估返利</p>
@@ -718,6 +733,20 @@ export default function Home() {
         </div>
       )}
 
+      {/* Withdraw Button */}
+      <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
+        <p className="text-sm text-gray-500 mb-3">确认收货结算后，添加企业微信申请提现</p>
+        <a
+          href="https://work.weixin.qq.com/ca/cawcde6e963de37ac0"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-3.5 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm shadow-green-200"
+        >
+          添加企业微信提现
+        </a>
+        <p className="text-xs text-gray-400 mt-2">提现将通过企业微信转账到您的账户</p>
+      </div>
+
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
         <h4 className="text-sm font-semibold text-blue-800 mb-2">查询说明</h4>
         <ul className="space-y-1.5 text-xs text-blue-700 leading-relaxed">
@@ -737,6 +766,10 @@ export default function Home() {
             <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
             <span>确认收货后结算可提现，最终以实际结算为准</span>
           </li>
+          <li className="flex gap-2">
+            <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
+            <span>提现请添加企业微信，发送订单号即可</span>
+          </li>
         </ul>
       </div>
     </div>
@@ -745,9 +778,12 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 pt-12 pb-6">
-        <h1 className="text-2xl font-bold text-center tracking-wide">省钱购</h1>
-        <p className="text-center text-sm opacity-90 mt-1">购物返利，省钱到手</p>
+      <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 pt-10 pb-5">
+        <div className="flex items-center justify-center gap-2.5 mb-1">
+          <img src="/logo.jpg" alt="省钱Go" className="w-10 h-10 rounded-xl shadow-sm" />
+          <h1 className="text-2xl font-bold tracking-wide">省钱Go</h1>
+        </div>
+        <p className="text-center text-sm opacity-90">购物返利，省钱到手</p>
       </div>
 
       {/* Tabs - plain div, no nesting, inline styles for reliable mobile taps */}
@@ -797,7 +833,7 @@ export default function Home() {
             WebkitTapHighlightColor: "transparent",
           }}
         >
-          查询佣金
+          查询提现
         </div>
       </div>
 
@@ -807,7 +843,7 @@ export default function Home() {
       </div>
 
       <div className="text-center text-xs text-gray-300 py-6">
-        省钱购 · 购物更实惠
+        省钱Go · 购物更实惠
       </div>
     </div>
   );
