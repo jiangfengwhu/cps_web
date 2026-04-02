@@ -510,15 +510,15 @@ export default function Home() {
         <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❶</span>
-            <span>在拼多多APP中找到想买的商品，复制链接</span>
+            <span>在拼多多APP中找到想买的商品，点击右上角分享，选择复制链接</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❷</span>
-            <span>回到本页面，自动识别平台并生成推广链接</span>
+            <span>回到本页面，点击粘贴并生成</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❸</span>
-            <span>自动跳转对应APP下单，享受返利优惠</span>
+            <span>请务必通过该页面的按钮进入拼多多APP下单，否则无法享受返利优惠</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❹</span>
@@ -532,7 +532,7 @@ export default function Home() {
         <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>打开APP后<strong>不要更改商品规格</strong>，否则需重新生成</span>
+            <span>打开APP后<strong>不要更改商品规格</strong>，否则需重新生成推广链接</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
@@ -701,7 +701,6 @@ export default function Home() {
         >
           添加企业微信提现
         </a>
-        <p className="text-xs text-gray-400 mt-2">提现将通过企业微信转账到您的账户</p>
       </div>
 
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
