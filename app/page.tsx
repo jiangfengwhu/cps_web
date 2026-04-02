@@ -17,7 +17,6 @@ interface Product {
 }
 
 interface ConvertResult {
-  shortUrl: string;
   clickUrl: string;
   jCommand?: string;
   schemaUrl?: string;
@@ -25,22 +24,20 @@ interface ConvertResult {
 }
 
 interface OrderItem {
-  orderId: number;
-  skuId?: number;
+  orderId: string;
   skuName?: string;
-  price?: number;
+  imgUrl?: string;
+  price?: string;
+  orderAmount?: string;
   skuNum?: number;
   orderTime?: string;
-  finishTime?: string;
-  validCode?: number;
   statusText?: string;
-  estimateFee?: number;
-  actualFee?: number;
   userEstimateFee?: number;
   userActualFee?: number;
-  commissionRate?: number;
-  withdrawable?: boolean;
-  withdrawableTime?: string;
+  platform?: string;
+  mallName?: string;
+  categoryName?: string;
+  failReason?: string;
   error?: string;
 }
 
@@ -74,27 +71,6 @@ const platformAppName: Record<string, string> = {
   pdd: "拼多多",
 };
 
-async function writeClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-      return true;
-    } catch {
-      return false;
-    } finally {
-      document.body.removeChild(ta);
-    }
-  }
-}
 
 function Spinner({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -114,7 +90,6 @@ export default function Home() {
   const [platform, setPlatform] = useState<Platform>(null);
   const [convertResult, setConvertResult] = useState<ConvertResult | null>(null);
   const [convertError, setConvertError] = useState("");
-  const [copied, setCopied] = useState(false);
   const [statusText, setStatusText] = useState("");
   const autoDetectedRef = useRef(false);
 
@@ -128,11 +103,14 @@ export default function Home() {
   const doConvert = useCallback(async (targetUrl: string, detectedPlatform?: Platform): Promise<ConvertResult | null> => {
     setConvertError("");
     setConvertResult(null);
-    setCopied(false);
 
     const p = detectedPlatform || detectPlatform(targetUrl);
     if (!p) {
-      setConvertError("无法识别商品链接，请粘贴京东/拼多多商品链接");
+      setConvertError("无法识别商品链接，请粘贴拼多多商品链接");
+      return null;
+    }
+    if (p === "jd") {
+      setConvertError("京东暂未开通，敬请期待");
       return null;
     }
     setPlatform(p);
@@ -155,15 +133,6 @@ export default function Home() {
         return null;
       }
       setConvertResult(data);
-
-      const copyContent = p === "jd"
-        ? (data.jCommand || data.shortUrl || data.clickUrl)
-        : (data.shortUrl || data.clickUrl);
-      if (copyContent) {
-        const ok = await writeClipboard(copyContent);
-        if (ok) setCopied(true);
-      }
-
       return data;
     } catch {
       setConvertError("网络错误，请检查网络后重试");
@@ -229,51 +198,37 @@ export default function Home() {
     setPlatform(null);
     setConvertResult(null);
     setConvertError("");
-    setCopied(false);
     setPhase("input");
-  }, []);
-
-  const handleCopy = useCallback(async (text: string) => {
-    const ok = await writeClipboard(text);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    }
   }, []);
 
   const openApp = useCallback(() => {
     if (!convertResult) return;
-    const webUrl = convertResult.shortUrl || convertResult.clickUrl;
-    if (!webUrl) return;
 
     if (platform === "pdd") {
-      window.location.href = convertResult.schemaUrl || webUrl;
+      if (convertResult.schemaUrl) {
+        window.location.href = convertResult.schemaUrl;
+      }
       return;
     }
 
-    let deepLink = "";
     if (platform === "jd") {
-      deepLink = "openapp.jdmobile://virtual?params=" + encodeURIComponent(JSON.stringify({ category: "jump", des: "m", url: webUrl }));
+      const webUrl = convertResult.clickUrl;
+      if (!webUrl) return;
+      const deepLink = "openapp.jdmobile://virtual?params=" + encodeURIComponent(JSON.stringify({ category: "jump", des: "m", url: webUrl }));
+      window.location.href = deepLink;
+      const fallbackTimer = setTimeout(() => {
+        if (!document.hidden) {
+          window.location.href = webUrl;
+        }
+      }, 2000);
+      const onHide = () => {
+        if (document.hidden) {
+          clearTimeout(fallbackTimer);
+          document.removeEventListener("visibilitychange", onHide);
+        }
+      };
+      document.addEventListener("visibilitychange", onHide);
     }
-
-    if (!deepLink) {
-      window.location.href = webUrl;
-      return;
-    }
-
-    window.location.href = deepLink;
-    const fallbackTimer = setTimeout(() => {
-      if (!document.hidden) {
-        window.location.href = webUrl;
-      }
-    }, 2000);
-    const onHide = () => {
-      if (document.hidden) {
-        clearTimeout(fallbackTimer);
-        document.removeEventListener("visibilitychange", onHide);
-      }
-    };
-    document.addEventListener("visibilitychange", onHide);
   }, [convertResult, platform]);
 
   const handleQueryOrders = useCallback(async () => {
@@ -332,11 +287,9 @@ export default function Home() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <p className="text-sm font-semibold text-green-800">
-          {copied ? "推广链接已复制到剪切板" : "推广链接生成成功"}
-        </p>
+        <p className="text-sm font-semibold text-green-800">推广链接生成成功</p>
         <p className="text-xs text-green-600 mt-1">
-          打开{platform ? platformAppName[platform] : ""}APP即可自动匹配商品
+          点击下方按钮打开{platform ? platformAppName[platform] : ""}APP下单
         </p>
       </div>
 
@@ -415,32 +368,6 @@ export default function Home() {
           打开{platform ? platformAppName[platform] : ""}APP下单
         </button>
 
-        {(() => {
-          if (copied) return null;
-          const command = platform === "jd" ? convertResult?.jCommand : null;
-          if (command) {
-            return (
-              <button
-                onClick={() => handleCopy(command)}
-                className="w-full bg-white border border-red-200 text-red-500 py-3 rounded-2xl font-medium text-sm active:bg-red-50 transition-colors"
-              >
-                重新复制口令
-              </button>
-            );
-          }
-          if (convertResult?.shortUrl) {
-            return (
-              <button
-                onClick={() => handleCopy(convertResult.shortUrl)}
-                className="w-full bg-white border border-red-200 text-red-500 py-3 rounded-2xl font-medium text-sm active:bg-red-50 transition-colors"
-              >
-                重新复制链接
-              </button>
-            );
-          }
-          return null;
-        })()}
-
         <button
           onClick={handleReset}
           className="w-full text-gray-400 py-2 text-sm active:text-gray-600 transition-colors"
@@ -448,21 +375,6 @@ export default function Home() {
           转换其他商品
         </button>
       </div>
-
-      {/* Short link display */}
-      {convertResult?.shortUrl && (
-        <div className="bg-gray-50 rounded-xl px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-gray-500 truncate flex-1">{convertResult.shortUrl}</span>
-            <button
-              onClick={() => handleCopy(convertResult.shortUrl)}
-              className="text-xs text-red-500 font-medium whitespace-nowrap"
-            >
-              复制
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Tips */}
       <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
@@ -497,7 +409,7 @@ export default function Home() {
         <textarea
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="请粘贴京东/拼多多商品链接..."
+          placeholder="请粘贴拼多多商品链接..."
           className="w-full h-20 px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-400 resize-none text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -536,7 +448,7 @@ export default function Home() {
         <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❶</span>
-            <span>在京东/拼多多APP中找到想买的商品，复制链接</span>
+            <span>在拼多多APP中找到想买的商品，复制链接</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❷</span>
@@ -587,7 +499,7 @@ export default function Home() {
 
   const orderPlatformOptions = [
     { key: "pdd" as const, label: "拼多多", disabled: false },
-    { key: "jd" as const, label: "京东", disabled: false },
+    { key: "jd" as const, label: "京东(即将上线)", disabled: true },
   ];
 
   const renderOrdersTab = () => (
@@ -701,13 +613,13 @@ export default function Home() {
                       )}
                     </div>
                   </div>
+                  {order.failReason && (
+                    <div className="mt-2 bg-red-50 rounded-lg px-3 py-2">
+                      <p className="text-xs text-red-600">{order.failReason}</p>
+                    </div>
+                  )}
                   <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center">
                     <span className="text-xs text-gray-400">{order.orderTime}</span>
-                    {order.withdrawable ? (
-                      <span className="text-xs text-green-600 font-medium">可提现</span>
-                    ) : order.withdrawableTime ? (
-                      <span className="text-xs text-gray-400">{order.withdrawableTime} 后可提现</span>
-                    ) : null}
                   </div>
                 </div>
               )}
