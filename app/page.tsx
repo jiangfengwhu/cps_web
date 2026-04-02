@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 
 type Tab = "convert" | "orders";
 type ConvertPhase = "input" | "converting" | "success";
-type Platform = "jd" | "taobao" | "pdd" | null;
+type Platform = "jd" | "pdd" | null;
 
 interface Product {
   name: string;
@@ -20,7 +20,7 @@ interface ConvertResult {
   shortUrl: string;
   clickUrl: string;
   jCommand?: string;
-  tpwd?: string;
+  schemaUrl?: string;
   product?: Product;
 }
 
@@ -58,9 +58,6 @@ function detectPlatform(text: string): Platform {
   if (/jd\.(com|hk)|3\.cn|u\.jd\.com|jingfen\.jd/i.test(t)) {
     return "jd";
   }
-  if (/taobao\.com|tmall\.com|tb\.cn|s\.click\.taobao/i.test(t) || /[€¥₳$£][a-zA-Z0-9]+[€¥₳$£]/.test(t)) {
-    return "taobao";
-  }
   if (/pinduoduo\.com|yangkeduo\.com|pdd\.com/i.test(t)) {
     return "pdd";
   }
@@ -69,13 +66,11 @@ function detectPlatform(text: string): Platform {
 
 const platformName: Record<string, string> = {
   jd: "京东",
-  taobao: "淘宝",
   pdd: "拼多多",
 };
 
 const platformAppName: Record<string, string> = {
   jd: "京东",
-  taobao: "淘宝/天猫",
   pdd: "拼多多",
 };
 
@@ -124,7 +119,7 @@ export default function Home() {
   const autoDetectedRef = useRef(false);
 
   // Orders states
-  const [orderPlatform, setOrderPlatform] = useState<"jd" | "taobao" | "pdd">("pdd");
+  const [orderPlatform, setOrderPlatform] = useState<"jd" | "pdd">("pdd");
   const [orderIds, setOrderIds] = useState("");
   const [querying, setQuerying] = useState(false);
   const [ordersResult, setOrdersResult] = useState<OrdersResult | null>(null);
@@ -137,18 +132,13 @@ export default function Home() {
 
     const p = detectedPlatform || detectPlatform(targetUrl);
     if (!p) {
-      setConvertError("无法识别商品链接，请粘贴拼多多商品链接");
-      return null;
-    }
-    if (p === "jd" || p === "taobao") {
-      setConvertError(`${platformName[p]}暂未开通，敬请期待。目前仅支持拼多多`);
+      setConvertError("无法识别商品链接，请粘贴京东/拼多多商品链接");
       return null;
     }
     setPlatform(p);
 
     const apiMap: Record<string, string> = {
       jd: "/api/jd/convert",
-      taobao: "/api/taobao/convert",
       pdd: "/api/pdd/convert",
     };
     const apiPath = apiMap[p];
@@ -166,10 +156,7 @@ export default function Home() {
       }
       setConvertResult(data);
 
-      const plat = p as Platform;
-      const copyContent = plat === "taobao"
-        ? (data.tpwd || data.shortUrl || data.clickUrl)
-        : plat === "jd"
+      const copyContent = p === "jd"
         ? (data.jCommand || data.shortUrl || data.clickUrl)
         : (data.shortUrl || data.clickUrl);
       if (copyContent) {
@@ -259,13 +246,14 @@ export default function Home() {
     const webUrl = convertResult.shortUrl || convertResult.clickUrl;
     if (!webUrl) return;
 
-    let deepLink = "";
     if (platform === "pdd") {
-      deepLink = "pinduoduo://com.xunmeng.pinduoduo/duo_link_router?url=" + encodeURIComponent(webUrl);
-    } else if (platform === "jd") {
+      window.location.href = convertResult.schemaUrl || webUrl;
+      return;
+    }
+
+    let deepLink = "";
+    if (platform === "jd") {
       deepLink = "openapp.jdmobile://virtual?params=" + encodeURIComponent(JSON.stringify({ category: "jump", des: "m", url: webUrl }));
-    } else if (platform === "taobao") {
-      deepLink = "tbopen://m.taobao.com/tbopen/index.html?action=ali.open.nav&module=h5&h5Url=" + encodeURIComponent(webUrl);
     }
 
     if (!deepLink) {
@@ -303,7 +291,6 @@ export default function Home() {
     try {
       const apiMap: Record<string, string> = {
         jd: "/api/jd/orders",
-        taobao: "/api/taobao/orders",
         pdd: "/api/pdd/orders",
       };
       const res = await fetch(apiMap[orderPlatform], {
@@ -354,13 +341,14 @@ export default function Home() {
       </div>
 
       {/* Product Card */}
-      {convertResult?.product && (() => {
+      {convertResult?.product ? (() => {
         const p = convertResult.product;
         const price = p.price != null ? Number(p.price) : 0;
         const rate = p.commissionRate ?? 0;
         const coupon = p.coupon ? Number(p.coupon) : 0;
         const finalPrice = coupon > 0 ? Math.max(price - coupon, 0) : price;
         const estimateCommission = rate > 0 && price > 0 ? (finalPrice * rate / 100 * 0.5) : 0;
+        const noCommission = rate <= 0;
 
         return (
           <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -394,17 +382,25 @@ export default function Home() {
                     <span className="text-xs text-gray-400">{p.shopName}</span>
                   )}
                 </div>
-                {estimateCommission > 0 && (
+                {estimateCommission > 0 ? (
                   <div className="mt-2 inline-flex items-center gap-1 bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded-md font-medium">
                     <span>预估返利</span>
                     <span className="text-sm font-bold">¥{estimateCommission.toFixed(2)}</span>
                   </div>
-                )}
+                ) : noCommission ? (
+                  <div className="mt-2 inline-flex items-center gap-1 bg-gray-50 text-gray-500 text-xs px-2 py-1 rounded-md font-medium">
+                    该商品暂无返利
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
         );
-      })()}
+      })() : (
+        <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 text-center">
+          <p className="text-sm text-gray-500">该商品暂无返利</p>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="space-y-3">
@@ -413,8 +409,6 @@ export default function Home() {
           className={`w-full text-white py-4 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm ${
             platform === "pdd"
               ? "bg-gradient-to-r from-red-600 to-red-500 shadow-red-200"
-              : platform === "taobao"
-              ? "bg-gradient-to-r from-orange-500 to-red-500 shadow-orange-200"
               : "bg-gradient-to-r from-red-500 to-orange-500 shadow-red-200"
           }`}
         >
@@ -423,7 +417,7 @@ export default function Home() {
 
         {(() => {
           if (copied) return null;
-          const command = platform === "taobao" ? convertResult?.tpwd : platform === "jd" ? convertResult?.jCommand : null;
+          const command = platform === "jd" ? convertResult?.jCommand : null;
           if (command) {
             return (
               <button
@@ -503,7 +497,7 @@ export default function Home() {
         <textarea
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="请粘贴拼多多商品链接..."
+          placeholder="请粘贴京东/拼多多商品链接..."
           className="w-full h-20 px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-400 resize-none text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -536,35 +530,25 @@ export default function Home() {
         </div>
       )}
 
-      {/* Platform Notice */}
-      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-        <div className="flex items-start gap-2">
-          <span className="text-blue-400 flex-shrink-0 mt-0.5 text-sm">ℹ</span>
-          <span className="text-xs text-blue-700 leading-relaxed">
-            目前仅支持<strong>拼多多</strong>，京东、淘宝即将上线
-          </span>
-        </div>
-      </div>
-
       {/* Tips */}
       <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
         <h4 className="text-sm font-semibold text-amber-800 mb-2.5">使用说明</h4>
         <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❶</span>
-            <span>在拼多多APP中找到想买的商品，点击分享复制链接</span>
+            <span>在京东/拼多多APP中找到想买的商品，复制链接</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❷</span>
-            <span>回到本页面，自动识别并生成推广链接</span>
+            <span>回到本页面，自动识别平台并生成推广链接</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❸</span>
-            <span>自动跳转拼多多APP下单，享受返利优惠</span>
+            <span>自动跳转对应APP下单，享受返利优惠</span>
           </li>
           <li className="flex gap-2">
             <span className="text-amber-400 flex-shrink-0 mt-0.5">❹</span>
-            <span>确认收货后可查询返利</span>
+            <span>确认收货后可查询返利并提现</span>
           </li>
         </ul>
       </div>
@@ -603,8 +587,7 @@ export default function Home() {
 
   const orderPlatformOptions = [
     { key: "pdd" as const, label: "拼多多", disabled: false },
-    { key: "jd" as const, label: "京东(即将上线)", disabled: true },
-    { key: "taobao" as const, label: "淘宝(即将上线)", disabled: true },
+    { key: "jd" as const, label: "京东", disabled: false },
   ];
 
   const renderOrdersTab = () => (
