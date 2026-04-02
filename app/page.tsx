@@ -16,11 +16,24 @@ interface Product {
   coupon?: string;
 }
 
+interface RecommendItem {
+  goodsSign: string;
+  name: string;
+  imgUrl: string;
+  price: string;
+  commissionRate: number;
+  shopName?: string;
+  coupon?: string;
+  salesTip?: string;
+}
+
 interface ConvertResult {
-  clickUrl: string;
+  clickUrl?: string;
   jCommand?: string;
   schemaUrl?: string;
+  hasCommission?: boolean;
   product?: Product;
+  recommendations?: RecommendItem[];
 }
 
 interface OrderItem {
@@ -278,128 +291,177 @@ export default function Home() {
     </div>
   );
 
-  const renderSuccess = () => (
-    <div className="space-y-4">
-      {/* Success Banner */}
-      <div className="bg-green-50 border border-green-100 rounded-2xl p-5 text-center">
-        <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-3">
-          <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <p className="text-sm font-semibold text-green-800">推广链接生成成功</p>
-        <p className="text-xs text-green-600 mt-1">
-          点击下方按钮打开{platform ? platformAppName[platform] : ""}APP下单
-        </p>
-      </div>
+  const [promotingSign, setPromotingSign] = useState<string | null>(null);
 
-      {/* Product Card */}
-      {convertResult?.product ? (() => {
-        const p = convertResult.product;
-        const price = p.price != null ? Number(p.price) : 0;
-        const rate = p.commissionRate ?? 0;
-        const coupon = p.coupon ? Number(p.coupon) : 0;
-        const finalPrice = coupon > 0 ? Math.max(price - coupon, 0) : price;
-        const estimateCommission = rate > 0 && price > 0 ? (finalPrice * rate / 100 * 0.5) : 0;
-        const noCommission = rate <= 0;
+  const handleRecommendClick = useCallback(async (goodsSign: string) => {
+    setPromotingSign(goodsSign);
+    try {
+      const res = await fetch("/api/pdd/promote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goodsSign }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.schemaUrl) {
+        setConvertError(data.error || "生成推广链接失败");
+        return;
+      }
+      window.location.href = data.schemaUrl;
+    } catch {
+      setConvertError("网络错误，请重试");
+    } finally {
+      setPromotingSign(null);
+    }
+  }, []);
 
-        return (
+  const renderSuccess = () => {
+    const hasCommission = convertResult?.hasCommission ?? false;
+    const prod = convertResult?.product;
+    const price = prod?.price != null ? Number(prod.price) : 0;
+    const rate = prod?.commissionRate ?? 0;
+    const coupon = prod?.coupon ? Number(prod.coupon) : 0;
+    const finalPrice = coupon > 0 ? Math.max(price - coupon, 0) : price;
+    const estimateCommission = rate > 0 && price > 0 ? (finalPrice * rate / 100 * 0.5) : 0;
+    const recs = convertResult?.recommendations;
+
+    return (
+      <div className="space-y-4">
+        {!hasCommission && (
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-gray-100 rounded-full mb-3">
+              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-gray-700">该商品暂无返利</p>
+          </div>
+        )}
+
+        {prod && (
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <div className="flex gap-3">
-              {p.imgUrl && (
-                <img
-                  src={p.imgUrl}
-                  alt={p.name}
-                  className="w-24 h-24 object-cover rounded-xl flex-shrink-0 bg-gray-100"
-                />
+              {prod.imgUrl && (
+                <img src={prod.imgUrl} alt={prod.name} className="w-24 h-24 object-cover rounded-xl flex-shrink-0 bg-gray-100" />
               )}
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">
-                  {p.name}
-                </h3>
+                <h3 className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">{prod.name}</h3>
                 <div className="mt-2 flex items-baseline gap-2 flex-wrap">
                   {price > 0 && (
-                    <span className="text-xl font-bold text-red-500">
-                      ¥{coupon > 0 ? finalPrice.toFixed(2) : p.price}
-                    </span>
+                    <span className="text-xl font-bold text-red-500">¥{coupon > 0 ? finalPrice.toFixed(2) : prod.price}</span>
                   )}
                   {coupon > 0 && price > 0 && (
-                    <span className="text-xs text-gray-400 line-through">¥{p.price}</span>
+                    <span className="text-xs text-gray-400 line-through">¥{prod.price}</span>
                   )}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                   {coupon > 0 && (
-                    <span className="text-xs bg-red-50 text-red-500 px-1.5 py-0.5 rounded-md font-medium">券¥{p.coupon}</span>
+                    <span className="text-xs bg-red-50 text-red-500 px-1.5 py-0.5 rounded-md font-medium">券¥{prod.coupon}</span>
                   )}
-                  {p.shopName && (
-                    <span className="text-xs text-gray-400">{p.shopName}</span>
-                  )}
+                  {prod.shopName && <span className="text-xs text-gray-400">{prod.shopName}</span>}
                 </div>
-                {estimateCommission > 0 ? (
+                {hasCommission && estimateCommission > 0 && (
                   <div className="mt-2 inline-flex items-center gap-1 bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded-md font-medium">
                     <span>预估返利</span>
                     <span className="text-sm font-bold">¥{estimateCommission.toFixed(2)}</span>
                   </div>
-                ) : noCommission ? (
-                  <div className="mt-2 inline-flex items-center gap-1 bg-gray-50 text-gray-500 text-xs px-2 py-1 rounded-md font-medium">
-                    该商品暂无返利
-                  </div>
-                ) : null}
+                )}
               </div>
             </div>
           </div>
-        );
-      })() : (
-        <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 text-center">
-          <p className="text-sm text-gray-500">该商品暂无返利</p>
+        )}
+
+        <div className="space-y-3">
+          {hasCommission ? (
+            <button
+              onClick={openApp}
+              className="w-full text-white py-4 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm bg-gradient-to-r from-red-600 to-red-500 shadow-red-200"
+            >
+              点击打开拼多多获取返利
+            </button>
+          ) : (
+            <button
+              onClick={handleReset}
+              className="w-full text-white py-4 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm bg-gray-400"
+            >
+              换个商品试试
+            </button>
+          )}
+          {hasCommission && (
+            <button onClick={handleReset} className="w-full text-gray-400 py-2 text-sm active:text-gray-600 transition-colors">
+              转换其他商品
+            </button>
+          )}
         </div>
-      )}
 
-      {/* Action Buttons */}
-      <div className="space-y-3">
-        <button
-          onClick={openApp}
-          className={`w-full text-white py-4 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm ${
-            platform === "pdd"
-              ? "bg-gradient-to-r from-red-600 to-red-500 shadow-red-200"
-              : "bg-gradient-to-r from-red-500 to-orange-500 shadow-red-200"
-          }`}
-        >
-          打开{platform ? platformAppName[platform] : ""}APP下单
-        </button>
+        {/* Recommendations */}
+        {!hasCommission && recs && recs.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-gray-800 mb-3">相似商品推荐（购买可返利）</h4>
+            <div className="grid grid-cols-2 gap-3">
+              {recs.map((rec) => {
+                const rPrice = Number(rec.price);
+                const rCoupon = rec.coupon ? Number(rec.coupon) : 0;
+                const rFinal = rCoupon > 0 ? Math.max(rPrice - rCoupon, 0) : rPrice;
+                const rCommission = rPrice > 0 && rec.commissionRate > 0 ? (rFinal * rec.commissionRate / 100 * 0.5) : 0;
 
-        <button
-          onClick={handleReset}
-          className="w-full text-gray-400 py-2 text-sm active:text-gray-600 transition-colors"
-        >
-          转换其他商品
-        </button>
+                return (
+                  <button
+                    key={rec.goodsSign}
+                    onClick={() => handleRecommendClick(rec.goodsSign)}
+                    disabled={!!promotingSign}
+                    className="bg-white rounded-2xl shadow-sm p-3 text-left active:bg-gray-50 transition-colors disabled:opacity-60"
+                  >
+                    {rec.imgUrl && (
+                      <img src={rec.imgUrl} alt={rec.name} className="w-full aspect-square object-cover rounded-xl bg-gray-100 mb-2" />
+                    )}
+                    <h5 className="text-xs font-medium text-gray-900 line-clamp-2 leading-snug min-h-[2.5em]">{rec.name}</h5>
+                    <div className="mt-1.5 flex items-baseline gap-1.5">
+                      <span className="text-base font-bold text-red-500">¥{rCoupon > 0 ? rFinal.toFixed(2) : rec.price}</span>
+                      {rCoupon > 0 && <span className="text-[10px] text-gray-400 line-through">¥{rec.price}</span>}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1 flex-wrap">
+                      {rCoupon > 0 && (
+                        <span className="text-[10px] bg-red-50 text-red-500 px-1 py-0.5 rounded font-medium">券¥{rec.coupon}</span>
+                      )}
+                      {rCommission > 0 && (
+                        <span className="text-[10px] bg-orange-50 text-orange-600 px-1 py-0.5 rounded font-medium">
+                          返¥{rCommission.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {hasCommission && (
+          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+            <h4 className="text-sm font-semibold text-amber-800 mb-2.5">温馨提示</h4>
+            <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
+              <li className="flex gap-2">
+                <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
+                <span>最终在<strong>拼多多APP</strong>下单，安全无风险</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
+                <span>打开APP后<strong>不要更改商品规格</strong>，否则需要重新生成</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
+                <span>需在 <strong>24小时内</strong> 完成下单</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
+                <span>下单 <strong>7天后</strong> 可提现（退款后没有返利）</span>
+              </li>
+            </ul>
+          </div>
+        )}
       </div>
-
-      {/* Tips */}
-      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-        <h4 className="text-sm font-semibold text-amber-800 mb-2.5">温馨提示</h4>
-        <ul className="space-y-2 text-xs text-amber-700 leading-relaxed">
-          <li className="flex gap-2">
-            <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>最终在<strong>{platform ? platformAppName[platform] : ""}APP</strong>下单，安全无风险</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>打开APP后<strong>不要更改商品规格</strong>，否则需要重新生成</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>需在 <strong>24小时内</strong> 完成下单</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-amber-400 flex-shrink-0 mt-0.5">●</span>
-            <span>下单 <strong>7天后</strong> 可提现（退款后没有返利）</span>
-          </li>
-        </ul>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderInput = () => (
     <div className="space-y-4">
@@ -740,6 +802,13 @@ export default function Home() {
       <div className="text-center text-xs text-gray-300 py-6">
         省钱Go · 购物更实惠
       </div>
+
+      {promotingSign && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
+          <Spinner className="h-10 w-10 text-white" />
+          <p className="mt-4 text-white text-base font-medium">正在跳转拼多多...</p>
+        </div>
+      )}
     </div>
   );
 }
