@@ -910,10 +910,6 @@ export default function Home() {
             <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
             <span>确认收货后结算可提现，最终以实际结算为准</span>
           </li>
-          <li className="flex gap-2">
-            <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
-            <span>提现请添加企业微信，发送订单号即可</span>
-          </li>
         </ul>
       </div>
     </div>
