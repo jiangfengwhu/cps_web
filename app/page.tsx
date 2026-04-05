@@ -929,7 +929,7 @@ export default function Home() {
     <div className={`min-h-screen bg-gray-100 ${isWechat ? "pt-9" : ""}`}>
       {/* WeChat tip - always fixed at top */}
       {isWechat && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white px-4 py-2 text-center text-xs flex items-center justify-center gap-1.5">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white px-4 py-2 text-center text-xs flex items-center justify-center">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
           <span>点击右上角 <strong>···</strong> 选择<strong>「在浏览器中打开」</strong>体验更佳</span>
         </div>
