@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 
-type Tab = "convert" | "orders";
+type Tab = "search" | "convert" | "orders";
 type ConvertPhase = "input" | "converting" | "success";
 type Platform = "jd" | "pdd" | null;
 
@@ -30,7 +30,7 @@ interface RecommendItem {
 interface ConvertResult {
   clickUrl?: string;
   jCommand?: string;
-  schemaUrl?: string;
+  mobileUrl?: string;
   hasCommission?: boolean;
   product?: Product;
   recommendations?: RecommendItem[];
@@ -94,8 +94,16 @@ function Spinner({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
+function isWechatBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /MicroMessenger/i.test(navigator.userAgent);
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("convert");
+  const [isWechat, setIsWechat] = useState(false);
+
+  useEffect(() => { setIsWechat(isWechatBrowser()); }, []);
 
   // Convert states
   const [phase, setPhase] = useState<ConvertPhase>("input");
@@ -105,6 +113,20 @@ export default function Home() {
   const [convertError, setConvertError] = useState("");
   const [statusText, setStatusText] = useState("");
   const autoDetectedRef = useRef(false);
+
+  // Search states
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [searchResults, setSearchResults] = useState<RecommendItem[]>([]);
+  const [searchListId, setSearchListId] = useState("");
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
+  const [searchDone, setSearchDone] = useState(false);
+  const searchSentinel = useRef<HTMLDivElement>(null);
+  const [hotItems, setHotItems] = useState<RecommendItem[]>([]);
+  const [hotLoading, setHotLoading] = useState(true);
+  const isSearchMode = searchKeyword.trim().length > 0 && searchResults.length > 0;
 
   // Orders states
   const [orderPlatform, setOrderPlatform] = useState<"jd" | "pdd">("pdd");
@@ -218,9 +240,8 @@ export default function Home() {
     if (!convertResult) return;
 
     if (platform === "pdd") {
-      if (convertResult.schemaUrl) {
-        window.location.href = convertResult.schemaUrl;
-      }
+      const url = convertResult.mobileUrl || convertResult.clickUrl;
+      if (url) window.location.href = url;
       return;
     }
 
@@ -291,6 +312,105 @@ export default function Home() {
     </div>
   );
 
+  useEffect(() => {
+    const loadHot = async () => {
+      try {
+        const res = await fetch("/api/pdd/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keyword: "", pageSize: 50 }),
+        });
+        const data = await res.json();
+        if (!res.ok) return;
+        const goods: RecommendItem[] = (data.goods || []).map((g: Record<string, unknown>) => ({
+          goodsSign: g.goodsSign as string,
+          name: g.name as string,
+          imgUrl: g.imgUrl as string,
+          price: g.price as string,
+          commissionRate: g.commissionRate as number,
+          shopName: g.shopName as string,
+          coupon: g.coupon as string | undefined,
+          salesTip: g.salesTip as string | undefined,
+        }));
+        setHotItems(goods);
+      } catch { /* ignore */ } finally {
+        setHotLoading(false);
+      }
+    };
+    loadHot();
+  }, []);
+
+  const doSearch = useCallback(async (keyword: string, page: number, listId: string) => {
+    if (page === 1) {
+      setSearchLoading(true);
+      setSearchResults([]);
+      setSearchDone(false);
+    } else {
+      setSearchLoadingMore(true);
+    }
+    try {
+      const res = await fetch("/api/pdd/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, page, pageSize: 60, sortType: 0, listId }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      const goods: RecommendItem[] = (data.goods || []).map((g: Record<string, unknown>) => ({
+        goodsSign: g.goodsSign as string,
+        name: g.name as string,
+        imgUrl: g.imgUrl as string,
+        price: g.price as string,
+        commissionRate: g.commissionRate as number,
+        shopName: g.shopName as string,
+        coupon: g.coupon as string | undefined,
+        salesTip: g.salesTip as string | undefined,
+      }));
+      if (page === 1) {
+        setSearchResults(goods);
+      } else {
+        setSearchResults((prev) => [...prev, ...goods]);
+      }
+      setSearchListId(data.listId || "");
+      setSearchTotal(data.totalCount || 0);
+      setSearchPage(page);
+      if (goods.length < 20) setSearchDone(true);
+    } catch { /* ignore */ } finally {
+      setSearchLoading(false);
+      setSearchLoadingMore(false);
+    }
+  }, []);
+
+  const handleSearch = useCallback(() => {
+    const kw = searchKeyword.trim();
+    if (!kw) {
+      setSearchResults([]);
+      setSearchDone(false);
+      return;
+    }
+    doSearch(kw, 1, "");
+  }, [searchKeyword, doSearch]);
+
+  const loadMoreSearch = useCallback(() => {
+    if (searchLoadingMore || searchDone || searchResults.length === 0) return;
+    doSearch(searchKeyword.trim(), searchPage + 1, searchListId);
+  }, [searchKeyword, searchPage, searchListId, searchLoadingMore, searchDone, searchResults.length, doSearch]);
+
+  const loadMoreRef = useRef(loadMoreSearch);
+  loadMoreRef.current = loadMoreSearch;
+
+  useEffect(() => {
+    if (activeTab !== "search") return;
+    const sentinel = searchSentinel.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMoreRef.current(); },
+      { rootMargin: "200px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, searchResults.length, searchLoadingMore]);
+
   const [promotingSign, setPromotingSign] = useState<string | null>(null);
 
   const handleRecommendClick = useCallback(async (goodsSign: string) => {
@@ -302,11 +422,11 @@ export default function Home() {
         body: JSON.stringify({ goodsSign }),
       });
       const data = await res.json();
-      if (!res.ok || !data.schemaUrl) {
+      if (!res.ok || !data.mobileUrl) {
         setConvertError(data.error || "生成推广链接失败");
         return;
       }
-      window.location.href = data.schemaUrl;
+      window.location.href = data.mobileUrl;
     } catch {
       setConvertError("网络错误，请重试");
     } finally {
@@ -321,7 +441,7 @@ export default function Home() {
     const rate = prod?.commissionRate ?? 0;
     const coupon = prod?.coupon ? Number(prod.coupon) : 0;
     const finalPrice = coupon > 0 ? Math.max(price - coupon, 0) : price;
-    const estimateCommission = rate > 0 && price > 0 ? (finalPrice * rate / 100 * 0.5) : 0;
+    const cashbackRate = rate > 0 ? (rate * 0.5) : 0;
     const recs = convertResult?.recommendations;
 
     return (
@@ -355,16 +475,13 @@ export default function Home() {
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                   {coupon > 0 && (
-                    <span className="text-xs bg-red-50 text-red-500 px-1.5 py-0.5 rounded-md font-medium">券¥{prod.coupon}</span>
+                    <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-sm font-medium">券¥{prod.coupon}</span>
+                  )}
+                  {hasCommission && cashbackRate > 0 && (
+                    <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-1.5 py-0.5 rounded-sm font-bold">返现{cashbackRate.toFixed(1)}%</span>
                   )}
                   {prod.shopName && <span className="text-xs text-gray-400">{prod.shopName}</span>}
                 </div>
-                {hasCommission && estimateCommission > 0 && (
-                  <div className="mt-2 inline-flex items-center gap-1 bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded-md font-medium">
-                    <span>预估返利</span>
-                    <span className="text-sm font-bold">¥{estimateCommission.toFixed(2)}</span>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -379,12 +496,20 @@ export default function Home() {
               点击打开拼多多获取返利
             </button>
           ) : (
-            <button
-              onClick={handleReset}
-              className="w-full text-white py-4 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm bg-gray-400"
-            >
-              换个商品试试
-            </button>
+            <>
+              <button
+                onClick={handleReset}
+                className="w-full text-white py-4 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm bg-gray-400"
+              >
+                换个商品试试
+              </button>
+              <button
+                onClick={() => { handleReset(); setActiveTab("search"); }}
+                className="w-full text-white py-4 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm bg-gradient-to-r from-red-500 to-orange-500 shadow-red-200"
+              >
+                搜索高返利商品
+              </button>
+            </>
           )}
           {hasCommission && (
             <button onClick={handleReset} className="w-full text-gray-400 py-2 text-sm active:text-gray-600 transition-colors">
@@ -397,41 +522,8 @@ export default function Home() {
         {!hasCommission && recs && recs.length > 0 && (
           <div>
             <h4 className="text-sm font-semibold text-gray-800 mb-3">相似商品推荐（购买可返利）</h4>
-            <div className="grid grid-cols-2 gap-3">
-              {recs.map((rec) => {
-                const rPrice = Number(rec.price);
-                const rCoupon = rec.coupon ? Number(rec.coupon) : 0;
-                const rFinal = rCoupon > 0 ? Math.max(rPrice - rCoupon, 0) : rPrice;
-                const rCommission = rPrice > 0 && rec.commissionRate > 0 ? (rFinal * rec.commissionRate / 100 * 0.5) : 0;
-
-                return (
-                  <button
-                    key={rec.goodsSign}
-                    onClick={() => handleRecommendClick(rec.goodsSign)}
-                    disabled={!!promotingSign}
-                    className="bg-white rounded-2xl shadow-sm p-3 text-left active:bg-gray-50 transition-colors disabled:opacity-60"
-                  >
-                    {rec.imgUrl && (
-                      <img src={rec.imgUrl} alt={rec.name} className="w-full aspect-square object-cover rounded-xl bg-gray-100 mb-2" />
-                    )}
-                    <h5 className="text-xs font-medium text-gray-900 line-clamp-2 leading-snug min-h-[2.5em]">{rec.name}</h5>
-                    <div className="mt-1.5 flex items-baseline gap-1.5">
-                      <span className="text-base font-bold text-red-500">¥{rCoupon > 0 ? rFinal.toFixed(2) : rec.price}</span>
-                      {rCoupon > 0 && <span className="text-[10px] text-gray-400 line-through">¥{rec.price}</span>}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 flex-wrap">
-                      {rCoupon > 0 && (
-                        <span className="text-[10px] bg-red-50 text-red-500 px-1 py-0.5 rounded font-medium">券¥{rec.coupon}</span>
-                      )}
-                      {rCommission > 0 && (
-                        <span className="text-[10px] bg-orange-50 text-orange-600 px-1 py-0.5 rounded font-medium">
-                          返¥{rCommission.toFixed(2)}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="grid grid-cols-2 gap-2">
+              {recs.map(renderGoodsCard)}
             </div>
           </div>
         )}
@@ -546,6 +638,108 @@ export default function Home() {
       </div>
     </div>
   );
+
+  const renderGoodsCard = (item: RecommendItem) => {
+    const iPrice = Number(item.price);
+    const iCoupon = item.coupon ? Number(item.coupon) : 0;
+    const iFinal = iCoupon > 0 ? Math.max(iPrice - iCoupon, 0) : iPrice;
+    const cashbackRate = item.commissionRate > 0 ? (item.commissionRate * 0.5) : 0;
+
+    return (
+      <button
+        key={item.goodsSign}
+        onClick={() => handleRecommendClick(item.goodsSign)}
+        disabled={!!promotingSign}
+        className="bg-white rounded-xl overflow-hidden text-left active:bg-gray-50 transition-colors disabled:opacity-60"
+      >
+        {item.imgUrl && (
+          <img src={item.imgUrl} alt={item.name} className="w-full aspect-square object-cover bg-gray-100" />
+        )}
+        <div className="p-2.5">
+          <h5 className="text-xs font-medium text-gray-900 line-clamp-2 leading-snug min-h-[2.5em]">{item.name}</h5>
+          {(iCoupon > 0 || cashbackRate > 0) && (
+            <div className="mt-1.5 flex items-center gap-1">
+              {iCoupon > 0 && (
+                <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-sm font-medium">券¥{item.coupon}</span>
+              )}
+              {cashbackRate > 0 && (
+                <span className="text-[10px] bg-gradient-to-r from-orange-500 to-red-500 text-white px-1.5 py-0.5 rounded-sm font-bold">返现{cashbackRate.toFixed(1)}%</span>
+              )}
+            </div>
+          )}
+          <div className="mt-1.5 flex items-baseline gap-1">
+            <span className="text-sm font-bold text-red-500">¥{iCoupon > 0 ? iFinal.toFixed(2) : item.price}</span>
+            {iCoupon > 0 && <span className="text-[10px] text-gray-300 line-through">¥{item.price}</span>}
+            {item.salesTip && (
+              <span className="text-[10px] text-gray-400 ml-auto truncate max-w-[50%]">已售{item.salesTip}</span>
+            )}
+          </div>
+        </div>
+      </button>
+    );
+  };
+
+  const renderSearchTab = () => {
+    if (isSearchMode || searchLoading) {
+      return (
+        <div>
+          {searchLoading && (
+            <div className="flex justify-center py-10">
+              <Spinner className="h-8 w-8 text-red-500" />
+            </div>
+          )}
+
+          {!searchLoading && searchResults.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {searchResults.map(renderGoodsCard)}
+            </div>
+          )}
+
+          {!searchLoading && searchResults.length > 0 && !searchDone && (
+            <div ref={searchSentinel} className="flex justify-center py-4">
+              {searchLoadingMore ? (
+                <Spinner className="h-5 w-5 text-gray-400" />
+              ) : (
+                <span className="text-xs text-gray-400">上滑加载更多</span>
+              )}
+            </div>
+          )}
+
+          {!searchLoading && searchResults.length > 0 && searchDone && (
+            <div className="text-center py-4">
+              <span className="text-xs text-gray-400">已展示全部商品</span>
+            </div>
+          )}
+
+          {!searchLoading && searchResults.length === 0 && (
+            <div className="text-center py-10 text-sm text-gray-400">未搜到相关商品</div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        {hotLoading ? (
+          <div className="flex justify-center py-10">
+            <Spinner className="h-8 w-8 text-red-500" />
+          </div>
+        ) : hotItems.length > 0 ? (
+          <>
+            <div className="flex items-center gap-1.5 px-1 pb-2">
+              <span className="text-sm font-semibold text-gray-700">热卖推荐</span>
+              <span className="text-xs text-gray-400">购买即可返利</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {hotItems.map(renderGoodsCard)}
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-10 text-sm text-gray-400">暂无推荐商品</div>
+        )}
+      </div>
+    );
+  };
 
   const renderConvertTab = () => {
     switch (phase) {
@@ -732,70 +926,90 @@ export default function Home() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 pt-10 pb-5">
+      <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 pt-8 pb-5">
         <div className="flex items-center justify-center gap-2.5 mb-1">
           <img src="/logo.jpg" alt="省钱Go" className="w-10 h-10 rounded-xl shadow-sm" />
           <h1 className="text-2xl font-bold tracking-wide">省钱Go</h1>
         </div>
-        <p className="text-center text-sm opacity-90">购物返利，省钱到手</p>
       </div>
 
-      {/* Tabs - plain div, no nesting, inline styles for reliable mobile taps */}
-      <div
-        style={{
-          display: "flex",
-          background: "#fff",
-          borderBottom: "1px solid #f0f0f0",
-          position: "sticky",
-          top: 0,
-          zIndex: 20,
-        }}
-      >
+      {/* Sticky: WeChat banner + Tabs + Search bar */}
+      <div className="sticky top-0 z-30">
+        {isWechat && (
+          <div className="bg-amber-500 text-white px-4 py-2.5 text-center text-xs flex items-center justify-center gap-1.5">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
+            <span>点击右上角 <strong>···</strong> 选择<strong>「在浏览器中打开」</strong>体验更佳</span>
+          </div>
+        )}
+
         <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setActiveTab("convert")}
           style={{
-            flex: 1,
-            padding: "14px 0",
-            textAlign: "center",
-            fontSize: 14,
-            fontWeight: 500,
-            color: activeTab === "convert" ? "#ef4444" : "#9ca3af",
-            borderBottom: activeTab === "convert" ? "2px solid #ef4444" : "2px solid transparent",
-            cursor: "pointer",
-            userSelect: "none",
-            WebkitTapHighlightColor: "transparent",
+            display: "flex",
+            background: "#fff",
+            borderBottom: "1px solid #f0f0f0",
           }}
         >
-          生成链接
+          {([["search", "搜索商品"], ["convert", "生成链接"], ["orders", "查询提现"]] as const).map(([key, label]) => (
+            <div
+              key={key}
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveTab(key)}
+              style={{
+                flex: 1,
+                padding: "12px 0",
+                textAlign: "center",
+                fontSize: 14,
+                fontWeight: 500,
+                color: activeTab === key ? "#ef4444" : "#9ca3af",
+                borderBottom: activeTab === key ? "2px solid #ef4444" : "2px solid transparent",
+                cursor: "pointer",
+                userSelect: "none",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              {label}
+            </div>
+          ))}
         </div>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setActiveTab("orders")}
-          style={{
-            flex: 1,
-            padding: "14px 0",
-            textAlign: "center",
-            fontSize: 14,
-            fontWeight: 500,
-            color: activeTab === "orders" ? "#ef4444" : "#9ca3af",
-            borderBottom: activeTab === "orders" ? "2px solid #ef4444" : "2px solid transparent",
-            cursor: "pointer",
-            userSelect: "none",
-            WebkitTapHighlightColor: "transparent",
-          }}
-        >
-          查询提现
-        </div>
+
+        {activeTab === "search" && (
+          <div className="bg-gray-100 px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center bg-white rounded-full px-4 py-2 shadow-sm">
+                <svg className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="m21 21-4.35-4.35" />
+                </svg>
+                <input
+                  value={searchKeyword}
+                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  placeholder="搜索商品，购买享返利"
+                  className="flex-1 text-sm text-gray-800 placeholder:text-gray-400 outline-none bg-transparent"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+                />
+                {searchKeyword && (
+                  <button onClick={() => { setSearchKeyword(""); }} className="ml-1 text-gray-300 active:text-gray-500">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={handleSearch}
+                disabled={searchLoading}
+                className="px-4 py-2 bg-red-500 text-white rounded-full text-sm font-medium active:bg-red-600 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                搜索
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
-      <div className="max-w-lg mx-auto px-4 py-5">
-        {activeTab === "convert" ? renderConvertTab() : renderOrdersTab()}
+      <div className={activeTab === "search" ? "max-w-lg mx-auto px-2 py-2" : "max-w-lg mx-auto px-4 py-5"}>
+        {activeTab === "search" ? renderSearchTab() : activeTab === "convert" ? renderConvertTab() : renderOrdersTab()}
       </div>
 
       <div className="text-center text-xs text-gray-300 py-6">
