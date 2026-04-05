@@ -926,17 +926,17 @@ export default function Home() {
   );
 
   return (
-    <div className={`min-h-screen bg-gray-100 ${isWechat ? "pt-9" : ""}`}>
+    <div className="min-h-screen bg-gray-100">
       {/* WeChat tip - always fixed at top */}
       {isWechat && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white px-4 py-2 text-center text-xs flex items-center justify-center">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
+        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white px-4 text-center text-xs flex items-center justify-center gap-1.5" style={{ height: 36 }}>
+          <svg className="w-4 h-4 flex-shrink-0 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>
           <span>点击右上角 <strong>···</strong> 选择<strong>「在浏览器中打开」</strong>体验更佳</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 pt-8 pb-5">
+      <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 pb-5" style={{ paddingTop: isWechat ? `calc(2rem + 36px)` : "2rem" }}>
         <div className="flex items-center justify-center gap-2.5 mb-1">
           <img src="/logo.jpg" alt="省钱Go" className="w-10 h-10 rounded-xl shadow-sm" />
           <h1 className="text-2xl font-bold tracking-wide">省钱Go</h1>
@@ -944,7 +944,7 @@ export default function Home() {
       </div>
 
       {/* Sticky: Tabs + Search bar */}
-      <div className={`sticky z-30 ${isWechat ? "top-9" : "top-0"}`}>
+      <div className="sticky z-30" style={{ top: isWechat ? 36 : 0 }}>
 
         <div
           style={{
