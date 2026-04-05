@@ -761,33 +761,42 @@ export default function Home() {
   const renderOrdersTab = () => (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl shadow-sm p-4">
-        {/* Platform Selector */}
-        <label className="block text-sm font-medium text-gray-700 mb-2">选择平台</label>
-        <div className="flex gap-2 mb-4">
-          {orderPlatformOptions.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => { if (!opt.disabled) { setOrderPlatform(opt.key); setOrdersResult(null); setOrdersError(""); } }}
-              disabled={opt.disabled}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                opt.disabled
-                  ? "bg-gray-50 text-gray-300 cursor-not-allowed"
-                  : orderPlatform === opt.key
-                  ? "bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-sm"
-                  : "bg-gray-100 text-gray-500 active:bg-gray-200"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {orderPlatformOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => { if (!opt.disabled) { setOrderPlatform(opt.key); setOrdersResult(null); setOrdersError(""); } }}
+                disabled={opt.disabled}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  opt.disabled
+                    ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+                    : orderPlatform === opt.key
+                    ? "bg-red-500 text-white"
+                    : "bg-gray-100 text-gray-500 active:bg-gray-200"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <a
+            href="https://work.weixin.qq.com/ca/cawcde6e963de37ac0"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm active:opacity-90 transition-opacity"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" /></svg>
+            去提现
+          </a>
         </div>
 
-        <label className="block text-sm font-medium text-gray-700 mb-2">订单号</label>
         <textarea
           value={orderIds}
           onChange={(e) => setOrderIds(e.target.value)}
-          placeholder={"请输入订单号，每行一个\n支持多个订单同时查询"}
-          className="w-full h-32 px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-400 resize-none text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all"
+          rows={2}
+          placeholder={"请输入订单号，每行一个"}
+          className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-400 resize-none text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all"
         />
         <button
           onClick={handleQueryOrders}
@@ -800,7 +809,7 @@ export default function Home() {
               查询中...
             </span>
           ) : (
-            "查询提现"
+            "查询返利"
           )}
         </button>
       </div>
@@ -813,9 +822,11 @@ export default function Home() {
 
       {ordersResult && (
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <h3 className="text-sm font-medium text-gray-500 mb-3 text-center">返利汇总</h3>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-5 py-3 bg-gradient-to-r from-red-50 to-orange-50 border-b border-red-100/50">
+              <h3 className="text-base font-bold text-gray-800">返利汇总</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4 px-5 py-4">
               <div className="text-center">
                 <p className="text-xs text-gray-400 mb-1">预估返利</p>
                 <p className="text-2xl font-bold text-orange-500">¥{ordersResult.totalEstimateFee.toFixed(2)}</p>
@@ -884,26 +895,9 @@ export default function Home() {
         </div>
       )}
 
-      {/* Withdraw Button */}
-      <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
-        <p className="text-sm text-gray-500 mb-3">确认收货结算后，添加企业微信申请提现</p>
-        <a
-          href="https://work.weixin.qq.com/ca/cawcde6e963de37ac0"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-3.5 rounded-2xl font-semibold text-base active:opacity-90 transition-opacity shadow-sm shadow-green-200"
-        >
-          添加企业微信提现
-        </a>
-      </div>
-
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-        <h4 className="text-sm font-semibold text-blue-800 mb-2">查询说明</h4>
+        <h4 className="text-sm font-semibold text-blue-800 mb-2">说明</h4>
         <ul className="space-y-1.5 text-xs text-blue-700 leading-relaxed">
-          <li className="flex gap-2">
-            <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
-            <span>请先选择对应平台，再输入该平台的订单号</span>
-          </li>
           <li className="flex gap-2">
             <span className="text-blue-300 flex-shrink-0 mt-0.5">●</span>
             <span>仅可查询通过推广链接下单的订单</span>
@@ -953,7 +947,7 @@ export default function Home() {
             borderBottom: "1px solid #f0f0f0",
           }}
         >
-          {([["search", "搜索商品"], ["convert", "生成链接"], ["orders", "查询提现"]] as const).map(([key, label]) => (
+          {([["search", "搜索商品"], ["convert", "生成链接"], ["orders", "提现"]] as const).map(([key, label]) => (
             <div
               key={key}
               role="button"
